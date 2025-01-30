@@ -1,55 +1,67 @@
-const bcrypt = require('bcrypt');
-const userModel = require('../models/user');
-
-const jwt = require('jsonwebtoken');
-const dotenv = require('dotenv').config()
+const bcrypt = require("bcrypt");
+const userModel = require("../models/user");
+const jwt = require("jsonwebtoken");
+const dotenv = require("dotenv").config();
 
 const handleLogin = async (req, res) => {
-    // Destructure request body
-    const { username, password } = req.body;
-    // Validate login data
-    if (!username || !password) return res.sendStatus(400);
-    // Query username
-    const foundUser = await userModel.findByUserName(username);
-    // Evaluate username
-    if (!foundUser[0]) return res.sendStatus(401);
-    // Evaluate passowrd
-    const match = await bcrypt.compare(password, foundUser[0].password)
-    if (match) {
-        // Get User Roles
-        const foundUserRoles = await userModel.getUserRoles(foundUser[0].id)
-        // Destructure User Roles
-        foundUser[0]["roles"] = {}
-        for (role in foundUserRoles) {
-            foundUser[0]['roles'][foundUserRoles[role]["role"]] = foundUserRoles[role]["role_id"]
-        }
-        const roles = Object.values(foundUser[0].roles)
-        // Create JWTs
-        const accessToken = jwt.sign(
-            {
-                "userInfo": {
-                    "username": foundUser[0].username,
-                    "roles": roles
-                }
-            },
-            process.env.ACCESS_TOKEN_SECRET,
-            { expiresIn: '30m' }
-        )
-        const refreshToken = jwt.sign(
-            { "username": foundUser[0].username },
-            process.env.REFRESH_TOKEN_SECRET,
-            { expiresIn: '1m' }
-        )
+  const { username, password } = req.body;
 
-        await userModel.refreshToken(foundUser[0].id, refreshToken)
+  if (!username || !password)
+    return res
+      .status(400)
+      .json({ message: "Username and password are required." });
 
-        res.cookie('jwt', refreshToken, { httpOnly: true, maxAge: 365 * 24 * 60 * 60 * 1000 });
-        res.json({ accessToken });
-    } else {
-        res.sendStatus(401);
-    }
-}
+  const foundUser = await userModel.findByUserName(username);
+
+  if (!foundUser[0])
+    return res.status(401).json({ message: "Invalid username" });
+
+  const match = await bcrypt.compare(password, foundUser[0].password);
+
+  if (!match) return res.status(401).json({ message: "Invalid password" });
+
+  const foundUserRoles = await userModel.getUserRoles(foundUser[0].id);
+  foundUser[0]["roles"] = {};
+
+  for (const role of foundUserRoles) {
+    foundUser[0]["roles"][role["role"]] = role["role_id"];
+  }
+
+  const roles = Object.values(foundUser[0].roles);
+
+  const accessToken = jwt.sign(
+    { userInfo: { username: foundUser[0].username, roles: roles } },
+    process.env.ACCESS_TOKEN_SECRET,
+    { expiresIn: "30m" }
+  );
+
+  const refreshToken = jwt.sign(
+    { username: foundUser[0].username },
+    process.env.REFRESH_TOKEN_SECRET,
+    { expiresIn: "7d" } // Set a longer expiration time
+  );
+
+  await userModel.refreshToken(foundUser[0].id, refreshToken);
+
+  const decoded = jwt.decode(accessToken);
+  const expiration = decoded.exp - decoded.iat;
+
+  res.cookie("jwt", refreshToken, {
+    httpOnly: true,
+    maxAge: 365 * 24 * 60 * 60 * 1000,
+    secure: process.env.NODE_ENV === "production", // Set secure flag in production
+    sameSite: "Strict", // Prevent cross-site requests
+  });
+
+  res.json({
+    id: foundUser[0].id,
+    username: foundUser[0].username,
+    accessToken,
+    expiresIn: expiration,
+    roles: roles,
+  });
+};
 
 module.exports = {
-    handleLogin
-}
+  handleLogin,
+};
