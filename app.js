@@ -1,62 +1,68 @@
-const APPconfig = require('./admin/config.js').app; // Import APP config
-const express = require('express');                 // Import Express Framework
-const http = require('http');                       // Import HTTP requests library
-const morgan = require('morgan');                   // Import HTTP request logger
-const parser = require('body-parser');              // Import body-parser middleware
-const path = require('path');
-const helmet = require('helmet');                   // Import Helmet for security
+const express = require('express');
+const http = require('http');
+const morgan = require('morgan');
+const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
-const corsOptions = require('./admin/corsOptions')
-const app = express();                              // Declaring express as the app framework
-const port = process.env.PORT || APPconfig.port;    // Declaring APP Port
-const host = process.env.HOST || '0.0.0.0';         // Declaring APP Host
-const { logEvents, reqLogger } = require('./middlewares/logEvents');
-const verifyJWT = require('./middlewares/verifyJWT');
 
-// Initializing server
+const APPconfig = require('./admin/config.js').app;
+const corsOptions = require('./admin/corsOptions');
+const { reqLogger } = require('./middlewares/logEvents');
+const verifyJWT = require('./middlewares/verifyJWT');
+const { failure } = require('./helpers/apiResponse');
+const errorHandler = require('./middlewares/errorHandler');
+
+const app = express();
 const server = http.createServer(app);
+const port = process.env.PORT || APPconfig.port;
+const host = process.env.HOST || APPconfig.host || '0.0.0.0';
+
+app.disable('x-powered-by');
 
 // Security middleware
 app.use(helmet());
-app.use(cors(corsOptions))
-// Body parsers
-app.use(parser.json()); // Parse Content-Type: application/json
-app.use(parser.urlencoded({ extended: true })); // Parse Content-Type: application/x-www-form-urlencoded
+app.use(cors(corsOptions));
+
+// Body parsing
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Logging middlewares
 app.use(morgan('dev'));
 app.use(reqLogger);
 app.use(cookieParser());
 
-// Open Routes
+// Open routes
 app.use('/user/login', require('./routes/user/login'));
 app.use('/user/refresh', require('./routes/refresh'));
 app.use('/user/logout', require('./routes/user/logout'));
 
+// Health and readiness routes
+app.get('/health', (req, res) => {
+  res.status(200).json({ success: true, status: 'ok' });
+});
 
+app.get('/ready', (req, res) => {
+  res.status(200).json({ success: true, status: 'ready' });
+});
 
-// Authorized Routes
+// Authorized routes
 app.use(verifyJWT);
 app.use('/users', require('./routes/user'));
 app.use('/user/create', require('./routes/user/create'));
 
-// Unit routes
-app.use('/units', require('./routes/unit'));  // Use unit routes
-
-// Client routes
-app.use('/clients', require('./routes/client'));  // Use client routes
-
-// 404 Route
-app.get('*', (req, res) => {
-    res.status(404).sendFile(path.join(__dirname, 'views', '404.html'));
+// 404 route
+app.use((req, res) => {
+  return failure(res, 404, 'Route not found');
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ message: "Internal Server Error" });
-});
+app.use(errorHandler);
 
-// Running server
-server.listen(port, host, () => console.log(`Server is running on ${host}:${port}`));
+if (require.main === module) {
+  server.listen(port, host, () => {
+    console.log(`Server is running on ${host}:${port}`);
+  });
+}
+
+module.exports = { app, server };

@@ -1,16 +1,16 @@
+const { randomUUID } = require('crypto');
 const { format } = require('date-fns');
-const { v4: uuid } = require('uuid');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const path = require('path');
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 
 // Use environment variable or default to '../logs'
 const LOG_DIR = process.env.LOG_DIR || path.join(__dirname, '..', 'logs');
 
 const logEvents = async (message, logName) => {
     const dateTime = `${format(new Date(), 'yyyyMMdd\tHH:mm:ss')}`;
-    const logItem = `${dateTime}\t${uuid()}\t${message}\n`;
+    const logItem = `${dateTime}\t${randomUUID()}\t${message}\n`;
 
     try {
         if (!fs.existsSync(LOG_DIR)) {

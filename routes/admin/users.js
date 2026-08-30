@@ -3,16 +3,13 @@ const router = express.Router();
 const createUserController = require('../../controllers/registerController');
 const usersController = require('../../controllers/usersController');
 const ROLES_LIST = require('../../admin/rolesList');
-const verifyRoles = require('../../middlewares/verifyRoles')
-
+const verifyRoles = require('../../middlewares/verifyRoles');
 
 router.route('/')
-        .get(verifyRoles(ROLES_LIST.Admin),usersController.handleGetAllUsers)
-        .post(createUserController.handleNewUser);
+  .get(verifyRoles(ROLES_LIST.ADMIN), usersController.handleGetAllUsers)
+  .post(createUserController.handleNewUser);
 
 router.route('/:id')
-        .get(usersController.handleGetUserById)
+  .get(usersController.handleGetUserById);
 
-
-
-module.exports = router
+module.exports = router;

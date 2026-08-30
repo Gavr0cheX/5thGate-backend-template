@@ -1,13 +1,13 @@
-const userModule = require("../models/user");
-const jwt = require("jsonwebtoken");
-require("dotenv").config();
+const userModule = require('../models/user');
+const jwt = require('jsonwebtoken');
+const { success, failure } = require('../helpers/apiResponse');
+require('dotenv').config({ quiet: true });
 
 const handleRefreshToken = async (req, res) => {
   const cookies = req.cookies;
 
   if (!cookies?.jwt) {
-    console.error("No refresh token provided");
-    return res.sendStatus(401); // Unauthorized
+    return failure(res, 401, 'No refresh token provided');
   }
 
   const refreshToken = cookies.jwt;
@@ -15,57 +15,47 @@ const handleRefreshToken = async (req, res) => {
   try {
     const foundUser = await userModule.findByToken(refreshToken);
     if (!foundUser || !foundUser[0]) {
-      console.warn("Refresh token not found or invalid");
-      return res.sendStatus(401); // Unauthorized
+      return failure(res, 401, 'Refresh token not found or invalid');
     }
 
-    // Get User Roles
     const foundUserRoles = await userModule.getUserRoles(foundUser[0].id);
-    foundUser[0].roles = foundUserRoles.reduce((rolesObj, role) => {
-      rolesObj[role.role] = role.role_id;
-      return rolesObj;
-    }, {});
+    const roles = foundUserRoles.map((role) => role.role_id);
 
-    // Verify JWT
-    jwt.verify(
-      refreshToken,
-      process.env.REFRESH_TOKEN_SECRET,
-      (err, decoded) => {
-        if (err) {
-          console.error("Invalid refresh token:", err.message);
-          return res.sendStatus(403); // Forbidden
-        }
+    jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, decoded) => {
+      if (err) {
+        return failure(res, 403, 'Invalid refresh token');
+      }
 
-        if (foundUser[0].username !== decoded.username) {
-          console.warn("Username mismatch during refresh token verification");
-          return res.sendStatus(403); // Forbidden
-        }
+      if (foundUser[0].username !== decoded.username) {
+        return failure(res, 403, 'Username mismatch during refresh token verification');
+      }
 
-        const roles = Object.values(foundUser[0].roles);
-        const accessToken = jwt.sign(
-          {
-            userInfo: {
-              username: decoded.username,
-              roles: roles,
-            },
+      const accessToken = jwt.sign(
+        {
+          userInfo: {
+            username: decoded.username,
+            roles,
           },
-          process.env.ACCESS_TOKEN_SECRET,
-          { expiresIn: "30m" }
-        );
-        const expiration = decoded.exp - decoded.iat;
+        },
+        process.env.ACCESS_TOKEN_SECRET,
+        { expiresIn: '30m' }
+      );
 
-        res.json({
+      const expiration = decoded.exp - decoded.iat;
+
+      return success(res, 200, 'Access token refreshed', {
+        user: {
           id: foundUser[0].id,
           username: foundUser[0].username,
-          accessToken,
-          expiresIn: expiration,
-          roles: roles,
-        });
-      }
-    );
+          roles,
+        },
+        accessToken,
+        expiresIn: expiration,
+      });
+    });
   } catch (error) {
-    console.error("Error handling refresh token:", error);
-    res.sendStatus(500); // Internal Server Error
+    console.error('Error handling refresh token:', error);
+    return failure(res, 500, 'Internal server error');
   }
 };
 

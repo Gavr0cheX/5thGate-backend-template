@@ -1,21 +1,23 @@
-// Update with your config settings.
+const { db } = require('./admin/config.js');
+
+if (db.provider !== 'mysql') {
+  throw new Error('Knex migrations are only available when DB_PROVIDER=mysql');
+}
 
 /**
  * @type { Object.<string, import("knex").Knex.Config> }
  */
 module.exports = {
-
   development: {
     client: 'mysql2',
     connection: {
-      host: '127.0.0.1',
-      user: 'root',
-      password: '',
-      database: 'newcapital',
+      host: db.host,
+      user: db.user,
+      password: db.password,
+      database: db.database,
     },
     migrations: {
       directory: './migrations',
     },
-
-  }
-}
+  },
+};
